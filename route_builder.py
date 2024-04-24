@@ -156,7 +156,7 @@ class RouteBuilder:
             self.first_start = False
             self.dlg = RouteBuilderDialog()
 
-            # Conecta os sinais clicked dos botões de seleção de pasta
+            # Connect the clicked signals of the folder selection buttons
             self.dlg.botaoVias.clicked.connect(self.select_via_path)
             self.dlg.botaoNos.clicked.connect(self.select_nos_path)
 
@@ -168,7 +168,14 @@ class RouteBuilder:
             # Ensure the location is not empty
             if local.strip() == "":
                 QMessageBox.critical(
-                    None, "Erro", "Por favor, preencha o campo de localização."
+                    None, "Error", "Please fill in the location field."
+                )
+                return
+
+            # Check if both vias_output_dir and nos_output_dir are set
+            if not hasattr(self, 'vias_output_dir') or not hasattr(self, 'nos_output_dir'):
+                QMessageBox.critical(
+                    None, "Error", "Please select both vias and nos output directories."
                 )
                 return
 
@@ -207,15 +214,16 @@ class RouteBuilder:
 
                 QMessageBox.information(
                     None,
-                    "Sucesso",
-                    f"Rede de ruas exportada como {output_path_streets} e nós exportados como {output_path_nodes}\nTempo decorrido: {elapsed_time:.2f} segundos",
+                    "Success",
+                    f"Street network exported as {output_path_streets} and nodes exported as {output_path_nodes}\nElapsed time: {elapsed_time:.2f} seconds",
                 )
 
             except Exception as e:
                 QMessageBox.critical(
-                    None, "Erro", f"Ocorreu um erro ao extrair a rede de ruas: {str(e)}"
+                    None, "Error", f"An error occurred while extracting street network: {str(e)}"
                 )
                 return
+
 
     def select_via_path(self):
         self.vias_output_dir = QFileDialog.getExistingDirectory(
