@@ -30,6 +30,14 @@ import pandas as pd
 import time
 from shapely.geometry import LineString, Point
 from osmnx.distance import nearest_nodes
+import matplotlib.pyplot as plt
+import io
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle 
+from datetime import datetime 
 
 class CaptureCoordinatesTool(QgsMapToolIdentifyFeature):
     def __init__(self, canvas):
@@ -45,13 +53,24 @@ class CaptureCoordinatesTool(QgsMapToolIdentifyFeature):
                 point = geometry.asPoint()
                 x = point.x()
                 y = point.y()
-                formatted_coords = "{:.6f}, {:.6f}".format(y, x)  # Formata as coordenadas
-                QMessageBox.information(None, "Coordenadas Capturadas", f"Coordenadas capturadas: {formatted_coords}")
+                formatted_coords = "{:.6f}, {:.6f}".format(
+                    y, x
+                )  # Formata as coordenadas
+                QMessageBox.information(
+                    None,
+                    "Coordenadas Capturadas",
+                    f"Coordenadas capturadas: {formatted_coords}",
+                )
                 # Copia as coordenadas para a área de transferência
                 QApplication.clipboard().setText(formatted_coords)
             else:
-                QMessageBox.warning(None, "Tipo de Geometria Inválido", "Somente geometrias do tipo ponto são suportadas.")
-        
+                QMessageBox.warning(
+                    None,
+                    "Tipo de Geometria Inválido",
+                    "Somente geometrias do tipo ponto são suportadas.",
+                )
+
+
 class RouteBuilder:
     def __init__(self, iface):
         self.iface = iface
@@ -74,10 +93,9 @@ class RouteBuilder:
     def tr(self, message):
         return QCoreApplication.translate("RouteBuilder", message)
 
-    def run_second_part(self): 
+    def run_second_part(self):
         second_dialog = SecondDialog()
         second_dialog.exec_()
-
 
     def add_action(
         self,
@@ -122,7 +140,7 @@ class RouteBuilder:
             parent=self.iface.mainWindow(),
             add_to_toolbar=False,
         )
-        
+
         self.add_action(
             icon_path,
             text=self.tr("Capture Coordinates"),
@@ -145,7 +163,6 @@ class RouteBuilder:
         self.capture_tool = CaptureCoordinatesTool(self.iface.mapCanvas())
         self.iface.mapCanvas().setMapTool(self.capture_tool)
 
-        
     def unload(self):
         for action in self.actions:
             self.iface.removePluginMenu(self.tr("&Route Builder"), action)
@@ -162,18 +179,17 @@ class RouteBuilder:
 
         result = self.dlg.exec_()
         if result:
-            # Extract the location name from the dialog
             local = self.dlg.local_edit.text()
 
-            # Ensure the location is not empty
             if local.strip() == "":
                 QMessageBox.critical(
                     None, "Error", "Please fill in the location field."
                 )
                 return
 
-            # Check if both vias_output_dir and nos_output_dir are set
-            if not hasattr(self, 'vias_output_dir') or not hasattr(self, 'nos_output_dir'):
+            if not hasattr(self, "vias_output_dir") or not hasattr(
+                self, "nos_output_dir"
+            ):
                 QMessageBox.critical(
                     None, "Error", "Please select both vias and nos output directories."
                 )
@@ -181,16 +197,11 @@ class RouteBuilder:
 
             try:
                 start_time = time.time()
-                # Use OSMnx to download the street network data based on the location
                 G = ox.graph_from_place(local, network_type="drive")
 
-                # Convert the networkx graph to a GeoDataFrame for streets
                 gdf_streets = ox.graph_to_gdfs(G, nodes=False)
-
-                # Convert the networkx graph to a GeoDataFrame for nodes
                 gdf_nodes = ox.graph_to_gdfs(G, edges=False)
 
-                # Ensure the GeoDataFrames contain only supported field types
                 gdf_streets = gdf_streets.applymap(
                     lambda x: x if not isinstance(x, list) else str(x)
                 )
@@ -198,11 +209,9 @@ class RouteBuilder:
                     lambda x: x if not isinstance(x, list) else str(x)
                 )
 
-                # Get the paths from the dialog
                 via_path = self.vias_output_dir
                 nos_path = self.nos_output_dir
 
-                # Export the GeoDataFrames as shapefiles for streets and nodes
                 output_path_streets = os.path.join(
                     via_path, f"{local}_street_network.shp"
                 )
@@ -212,6 +221,11 @@ class RouteBuilder:
 
                 elapsed_time = time.time() - start_time
 
+                num_nodes = len(gdf_nodes)
+                num_streets = len(gdf_streets)
+
+                self.generate_pdf_report(local, elapsed_time, num_nodes, num_streets)
+
                 QMessageBox.information(
                     None,
                     "Success",
@@ -220,10 +234,81 @@ class RouteBuilder:
 
             except Exception as e:
                 QMessageBox.critical(
-                    None, "Error", f"An error occurred while extracting street network: {str(e)}"
+                    None,
+                    "Error",
+                    f"An error occurred while extracting street network: {str(e)}",
                 )
                 return
+            
+    def generate_pdf_report(self, location, elapsed_time, num_nodes, num_streets):
+        output_dir = "C:/Users/Usuario/Desktop/aa/"
+        output_path = os.path.join(output_dir, "route_report.pdf")
+        doc = SimpleDocTemplate(output_path, pagesize=letter)
+        styles = getSampleStyleSheet()
+        centered_style = ParagraphStyle(name="Centered", alignment=1)
 
+        story = []
+
+        # Adicionar cabeçalho ao relatório
+        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
+
+        # Adicionar informações ao relatório
+        report_title = Paragraph(f"<b>Route Report</b>", styles["Title"])
+        story.append(report_title)
+        
+        # Adicionar a data como subtítulo centralizado
+        report_date = Paragraph(f"<i>{current_datetime}</i>", centered_style)
+        story.append(report_date)
+
+        story.append(Spacer(1, 12))
+        location_info = f"Location: {location}"
+        time_info = f"Elapsed Time: {elapsed_time:.2f} seconds"
+        num_nodes_info = f"Number of Nodes: {num_nodes}"
+        num_street_info = f"Number of Edges: {num_streets}"
+        info_paragraph = Paragraph(
+            f"{location_info}<br/>{num_nodes_info}<br/>{num_street_info}<br/>{time_info}",
+            styles["Normal"],
+        )
+        story.append(info_paragraph)
+
+        # Adicionar o gráfico de comparação
+        comparison_graph_buffer = self.plot_comparison_graph(num_nodes, num_streets)
+        comparison_image = Image(comparison_graph_buffer)
+        comparison_image._restrictSize(7 * inch, 6 * inch)
+        story.append(comparison_image)
+
+        doc.build(story)
+
+        QMessageBox.information(
+            None,
+            "Report Generated",
+            f"PDF report generated successfully at: {output_path}",
+        )
+
+
+    def plot_comparison_graph(self, num_nodes, num_streets):
+        import matplotlib.pyplot as plt
+        import io
+
+        # Dados para o gráfico
+        categories = ['Nodes', 'Streets']
+        quantities = [num_nodes, num_streets]
+
+        # Criar o gráfico de barras
+        plt.bar(categories, quantities, color=['blue', 'green'])
+        plt.xlabel('Categories')
+        plt.ylabel('Quantity')
+        plt.title('Comparison of Nodes and Streets')
+        
+        # Salvar o gráfico em um buffer de memória
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png')
+        buffer.seek(0)
+
+        # Limpar o gráfico para evitar sobreposições
+        plt.clf()
+
+        return buffer
 
     def select_via_path(self):
         self.vias_output_dir = QFileDialog.getExistingDirectory(
@@ -238,7 +323,7 @@ class RouteBuilder:
     def select_nos_path(self):
         self.nos_output_dir = QFileDialog.getExistingDirectory(
             self.iface.mainWindow(),
-            "Selecionar Pasta para Salvar os Nós",  # Alterando o título do diálogo
+            "Selecionar Pasta para Salvar os Nós",
             "/path/to/default/directory",
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
         )
